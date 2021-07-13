@@ -47,6 +47,9 @@ ConfigureXFSTestTools() {
             which python || [ -f /usr/libexec/platform-python ] && ln -s /usr/libexec/platform-python /sbin/python
         ;;
 
+        mariner)
+        ;;
+
         suse*|sles*)
             pack_list=(btrfsprogs libacl-devel libaio-devel libattr-devel libuuid-devel sqlite xfsdump xfsprogs-devel zlib-devel)
         ;;
@@ -59,7 +62,12 @@ ConfigureXFSTestTools() {
     # Install common & specific dependencies
     update_repos
     install_fio
-    pack_list+=(acl attr automake bc cifs-utils dos2unix dump e2fsprogs gawk gcc git libtool lvm2 make parted quota sed xfsdump xfsprogs indent python)
+    if [[ $DISTRO -eq "mariner" ]]; then
+        pack_list=(python-iniparse libacl-devel libaio-devel libattr-devel sqlite xfsprogs-devel zlib-devel btrfs-progs-devel)
+        pack_list+=(diffutils btrfs-progs btrfs-progs-devel xfsprogs xfsprogs-devel acl attr automake bc cifs-utils e2fsprogs gawk gcc git libtool lvm2 make parted sed xfsprogs autoconf)
+    else
+        pack_list+=(acl attr automake bc cifs-utils dos2unix dump e2fsprogs gawk gcc git libtool lvm2 make parted quota sed xfsdump xfsprogs indent python)
+    fi
     for package in "${pack_list[@]}"; do
         check_package "$package"
         if [ $? -eq 0 ]; then
@@ -70,6 +78,12 @@ ConfigureXFSTestTools() {
         install_nvme_cli
     fi
     modprobe btrfs
+    wget https://phoenixnap.dl.sourceforge.net/project/libuuid/libuuid-1.0.3.tar.gz
+
+    tar -xvf libuuid-1.0.3.tar.gz
+    cd libuuid-1.0.3
+    ./configure && make && make install
+    cd ..
     LogMsg "Packages installation complete."
     # Install dbench
     LogMsg "Remove folder $dbench_folder if exists."
@@ -237,7 +251,8 @@ Main() {
             # Azure provides links in /dev/disk/azure/ to /dev/sd[a-z] devices
             # this is needed as some 5+ kernels do not assign drive letters in any particular order
             # (previously the test disk was /dev/sdc)
-            testDisk=$(readlink -f /dev/disk/azure/scsi1/* | sed "s@/dev/@@g" | head -1)
+            #testDisk=$(readlink -f /dev/disk/azure/scsi1/* | sed "s@/dev/@@g" | head -1)
+            testDisk="sdc"
             ConfigureDisks "${testDisk}" "${testDisk}1" "${testDisk}2" "$FSTYP" "test" "scratch"
             # Configure disk in env and xfstests config file
             TEST_DEV="/dev/${testDisk}1"
@@ -245,7 +260,7 @@ Main() {
         fi
     fi
     # Copy config file into the xfstests folder
-    dos2unix ${XFSTestConfigFile}
+    sed -i 's/\r$//' ${XFSTestConfigFile}
     cp -f ${XFSTestConfigFile} ${xfs_folder}/local.config
 
     #
