@@ -544,7 +544,7 @@ function Is-VmAlive {
     return "False"
 }
 
-Function Configure-Umask([string] $username, [string] $password, [string] $ip, [int] $port) {
+Function Configure-Umask([string] $testVMUser, [string] $testVMPassword, [string] $VIP, [int] $SSHPort) {
     $umask = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "umask" -runAsSudo
     if ($umask -ne "0022") {
         Write-LogInfo "Configure-Umask: Detected umask ($umask)"
@@ -553,6 +553,7 @@ Function Configure-Umask([string] $username, [string] $password, [string] $ip, [
             $null = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "echo `"umask 0022`" >> /etc/bash.bashrc" -runAsSudo
         } else {
             $null = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "chfn -o umask=0022 $testVMUser" -runAsSudo
+            $null = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "chfn -o umask=0022 root" -runAsSudo
         }
         $umask = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "umask" -runAsSudo
         Write-LogInfo "Configure-Umask: Updated umask ($umask)"
@@ -560,6 +561,14 @@ Function Configure-Umask([string] $username, [string] $password, [string] $ip, [
 
     if (!$umask -imatch "0022") {
         Throw "Incorrect umask ($umask) and will cause problem with further execution."
+    }
+}
+
+Function Configure-UmaskInVMs($allVMData, $userName, $password){
+    foreach ( $vmData in $allVMData ) {
+        if (!$vmData.IsWindows) {
+            Configure-UMask $userName $password $vmData.PublicIP $vmData.SSHPort
+        }
     }
 }
 
@@ -1156,9 +1165,6 @@ Function Detect-LinuxDistro() {
 		[Parameter(Mandatory=$true)][string]$testVMUser,
 		[string]$testVMPassword
 	)
-
-	# Before proceeding to detect Linux guest distro configure umask
-	Configure-UMask $testVMUser $testVMPassword $VIP $SSHPort
 
 	$global:InitialKernelVersion = Run-LinuxCmd -ip $VIP -port $SSHPort -username $testVMUser -password $testVMPassword -command "uname -r"
 	Write-LogInfo "Initial Kernel Version: $global:InitialKernelVersion"
